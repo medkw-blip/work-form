@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>日常業務 枚数・時間記入フォーム</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #f5f5f5; font-family: 'Hiragino Sans', 'Meiryo', sans-serif; color: #1a1a1a; }
+
+.app { max-width: 680px; margin: 0 auto; background: #fff; min-height: 100vh; }
+
+.tabs { display: flex; border-bottom: 1px solid #e0e0e0; background: #fafafa; }
+.tab-btn { padding: 12px 18px; font-size: 13px; font-family: inherit; background: none; border: none; color: #888; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; }
+.tab-btn.active { color: #1a1a1a; border-bottom-color: #1a1a1a; font-weight: 600; }
+
+.panel { display: none; }
+.panel.active { display: block; }
+
+.app-header { padding: 16px 20px 14px; border-bottom: 1px solid #e0e0e0; background: #fff; }
+.app-header h1 { font-size: 17px; font-weight: 600; }
+.app-header p { font-size: 12px; color: #888; margin-top: 3px; }
+
+.form-body { padding: 18px 20px; display: flex; flex-direction: column; gap: 16px; }
+.row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+.field label { display: block; font-size: 11px; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
+.field input, .field select {
+  width: 100%; padding: 9px 11px; font-size: 14px; font-family: inherit;
+  color: #1a1a1a; background: #fff; border: 1px solid #d0d0d0;
+  border-radius: 6px; outline: none; transition: border-color 0.15s;
+  appearance: none; -webkit-appearance: none;
+}
+.field input:focus, .field select:focus { border-color: #1a1a1a; }
+.field .hint { font-size: 11px; color: #aaa; margin-top: 4px; }
+
+.time-row { display: grid; grid-template-columns: 1fr 24px 1fr; gap: 8px; align-items: end; }
+.calc-sep { font-size: 20px; color: #ccc; text-align: center; padding-bottom: 9px; }
+
+.manual-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #888; cursor: pointer; margin-top: 6px; user-select: none; }
+.manual-toggle input[type=checkbox] { width: auto; margin: 0; cursor: pointer; }
+
+.divider { height: 1px; background: #f0f0f0; }
+
+.btn-add { padding: 12px 20px; background: #1a1a1a; color: #fff; border: none; border-radius: 6px; font-size: 14px; font-family: inherit; font-weight: 600; cursor: pointer; width: 100%; transition: opacity 0.15s; }
+.btn-add:hover { opacity: 0.82; }
+
+.log-section { padding: 0 20px 20px; }
+.log-section h2 { font-size: 13px; font-weight: 600; color: #888; margin-bottom: 10px; padding-top: 18px; }
+.log-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.log-table th { text-align: left; padding: 7px 8px; background: #f5f5f5; color: #888; font-weight: 600; border-bottom: 1px solid #e0e0e0; }
+.log-table td { padding: 8px 8px; border-bottom: 1px solid #f0f0f0; }
+.log-table tr:last-child td { border-bottom: none; }
+.del-btn { background: none; border: none; color: #ccc; cursor: pointer; font-size: 13px; padding: 2px 4px; border-radius: 3px; }
+.del-btn:hover { color: #e00; }
+.empty-log { font-size: 13px; color: #bbb; text-align: center; padding: 24px 0; }
+
+.export-row { padding: 0 20px 24px; display: flex; gap: 10px; }
+.btn-outline { flex: 1; padding: 10px; border: 1px solid #d0d0d0; background: #fff; color: #1a1a1a; border-radius: 6px; font-size: 13px; font-family: inherit; cursor: pointer; transition: background 0.15s; }
+.btn-outline:hover { background: #f5f5f5; }
+
+/* SUMMARY */
+.summary-body { padding: 18px 20px; display: flex; flex-direction: column; gap: 20px; }
+.summary-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.summary-controls select, .summary-controls input { padding: 8px 10px; font-size: 13px; font-family: inherit; color: #1a1a1a; background: #fff; border: 1px solid #d0d0d0; border-radius: 6px; outline: none; appearance: none; -webkit-appearance: none; }
+.summary-controls label { font-size: 12px; color: #888; }
+.btn-search { padding: 8px 16px; background: #1a1a1a; color: #fff; border: none; border-radius: 6px; font-size: 13px; font-family: inherit; cursor: pointer; }
+.summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.summary-card { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 14px; }
+.summary-card h3 { font-size: 11px; font-weight: 600; color: #888; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+.summary-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid #f0f0f0; font-size: 12px; gap: 6px; }
+.summary-row:last-child { border-bottom: none; }
+.sname { color: #1a1a1a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90px; }
+.bar-wrap { flex: 1; height: 4px; background: #e0e0e0; border-radius: 2px; }
+.bar { height: 4px; background: #1a1a1a; border-radius: 2px; opacity: 0.5; }
+.val { font-weight: 600; white-space: nowrap; font-size: 12px; }
+.no-data { font-size: 13px; color: #bbb; text-align: center; padding: 20px 0; }
+
+/* GAS */
+.gas-body { padding: 18px 20px; }
+.gas-body h2 { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+.gas-body p { font-size: 13px; color: #666; margin-bottom: 14px; line-height: 1.7; }
+.gas-body pre { background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 6px; padding: 14px; font-size: 11px; overflow-x: auto; line-height: 1.6; white-space: pre; }
+.step { display: flex; gap: 10px; margin-bottom: 12px; }
+.step-num { width: 22px; height: 22px; border-radius: 50%; background: #1a1a1a; color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+.step-text { font-size: 13px; color: #666; line-height: 1.6; }
+.step-text strong { color: #1a1a1a; }
+.btn-copy { margin-top: 10px; padding: 9px 18px; border: 1px solid #d0d0d0; background: #fff; color: #1a1a1a; border-radius: 6px; font-size: 13px; font-family: inherit; cursor: pointer; }
+
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(60px); background: #1a1a1a; color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 13px; opacity: 0; transition: transform 0.25s, opacity 0.25s; pointer-events: none; white-space: nowrap; z-index: 100; }
+.toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+@media (max-width: 480px) {
+  .row-3 { grid-template-columns: 1fr 1fr; }
+  .summary-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('form',this)">📝 入力フォーム</button>
+    <button class="tab-btn" onclick="switchTab('summary',this)">📊 集計</button>
+    <button class="tab-btn" onclick="switchTab('gas',this)">🔗 スプレッドシート連携</button>
+  </div>
+
+  <!-- 入力フォーム -->
+  <div class="panel active" id="panel-form">
+    <div class="app-header">
+      <h1>日常業務 枚数・時間記入フォーム</h1>
+      <p>衣装手入れ・準備部署 ｜ 1行 = 担当者1人 × 1業務 × 1日</p>
+    </div>
+    <div class="form-body">
+      <div class="row-3">
+        <div class="field">
+          <label>日付</label>
+          <input type="date" id="f-date">
+        </div>
+        <div class="field">
+          <label>部門</label>
+          <select id="f-dept" onchange="onDeptChange()">
+            <option value="">選択してください</option>
+            <option>タキシード</option><option>紋付袴</option><option>ドレス</option>
+            <option>ドレス小物</option><option>フォーマル</option><option>モーニング</option>
+            <option>打掛・白無垢</option><option>留袖・振袖・袴</option>
+            <option>子供服</option><option>配集</option><option>事務データ</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>担当者</label>
+          <select id="f-person">
+            <option value="">選択してください</option>
+            <option>八杉</option><option>岩倉</option><option>小林</option><option>上田</option>
+            <option>西川</option><option>見谷</option><option>池田</option><option>渡部</option>
+            <option>服部</option><option>染橋</option><option>前田</option><option>岩尾</option>
+            <option>丸杉</option><option>村上</option><option>長谷川</option><option>仲井</option>
+          </select>
+        </div>
+      </div>
+      <div class="row-2">
+        <div class="field">
+          <label>業務 No.</label>
+          <select id="f-no" onchange="onTaskSelect()">
+            <option value="">部門を先に選択</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>業務内容</label>
+          <input type="text" id="f-task" placeholder="自動入力または手入力">
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div>
+        <div class="time-row">
+          <div class="field">
+            <label>枚数</label>
+            <input type="number" id="f-count" min="0" placeholder="例：5" oninput="calcTotal()">
+          </div>
+          <div class="calc-sep">×</div>
+          <div class="field">
+            <label>1枚あたり（分）</label>
+            <input type="number" id="f-per" min="0" placeholder="例：3" oninput="calcTotal()">
+          </div>
+        </div>
+        <div class="field" style="margin-top:12px">
+          <label>合計時間（分）</label>
+          <input type="number" id="f-total" min="0" placeholder="自動計算">
+          <label class="manual-toggle">
+            <input type="checkbox" id="f-manual" onchange="toggleManual()">
+            手入力モード（枚数が出ない業務など）
+          </label>
+        </div>
+      </div>
+      <div class="field">
+        <label>備考</label>
+        <input type="text" id="f-note" placeholder="例：毎週日曜、サイズ直しあり など">
+      </div>
+      <button class="btn-add" onclick="addRecord()">＋ 記録に追加</button>
+    </div>
+    <div class="log-section">
+      <h2 id="log-title">入力済み（0件）</h2>
+      <div id="log-area"><div class="empty-log">まだ記録がありません</div></div>
+    </div>
+    <div class="export-row">
+      <button class="btn-outline" onclick="exportCSV()">📥 CSVダウンロード</button>
+      <button class="btn-outline" onclick="clearAll()">🗑 全件クリア</button>
+    </div>
+  </div>
+
+  <!-- 集計 -->
+  <div class="panel" id="panel-summary">
+    <div class="summary-body">
+      <div class="summary-controls">
+        <label>期間：</label>
+        <input type="date" id="s-from">
+        <span style="font-size:13px;color:#888">〜</span>
+        <input type="date" id="s-to">
+        <select id="s-dept">
+          <option value="">全部門</option>
+          <option>タキシード</option><option>紋付袴</option><option>ドレス</option>
+          <option>ドレス小物</option><option>フォーマル</option><option>モーニング</option>
+          <option>打掛・白無垢</option><option>留袖・振袖・袴</option>
+          <option>子供服</option><option>配集</option><option>事務データ</option>
+        </select>
+        <button class="btn-search" onclick="renderSummary()">集計する</button>
+      </div>
+      <div class="summary-grid" id="summary-grid">
+        <div class="summary-card" style="grid-column:1/-1">
+          <p class="no-data">入力フォームでデータを追加してから「集計する」を押してください</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAS連携 -->
+  <div class="panel" id="panel-gas">
+    <div class="gas-body">
+      <h2>Googleスプレッドシートへの自動送信</h2>
+      <p>GASをデプロイしてURLを取得後、下に貼り付けて「送信」ボタンを押してください。</p>
+      <div class="step"><div class="step-num">1</div><div class="step-text">スプレッドシートのシート名を <strong>「データ蓄積」</strong> にする。</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-text">「拡張機能」→「Apps Script」→下のコードを貼り付けて保存。</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-text">「デプロイ」→「新しいデプロイ」→ウェブアプリ→アクセス権「全員」で公開。URLを下に貼る。</div></div>
+      <pre id="gas-code">function doPost(e) {
+  const sheet = SpreadsheetApp
+    .getActiveSpreadsheet()
+    .getSheetByName("データ蓄積");
+
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow([
+      "日付","部門","No.","業務内容",
+      "担当者","枚数","1枚あたり(分)",
+      "合計時間(分)","備考"
+    ]);
+  }
+
+  const rows = JSON.parse(e.postData.contents);
+  rows.forEach(r => {
+    sheet.appendRow([
+      r.date, r.dept, r.no, r.task,
+      r.person, r.count, r.per,
+      r.total, r.note
+    ]);
+  });
+
+  return ContentService
+    .createTextOutput(JSON.stringify({status:"ok"}))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doGet(e) {
+  return ContentService
+    .createTextOutput(JSON.stringify({status:"ok"}))
+    .setMimeType(ContentService.MimeType.JSON);
+}</pre>
+      <button class="btn-copy" onclick="copyGAS()">📋 コードをコピー</button>
+      <div style="margin-top:20px">
+        <div class="field">
+          <label>GAS WebアプリURL</label>
+          <input type="text" id="gas-url" placeholder="https://script.google.com/macros/s/...">
+        </div>
+        <button class="btn-outline" style="margin-top:10px;width:100%" onclick="sendToSheet()">📤 スプレッドシートに送信（全件）</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const TASKS = {
+  "タキシード": ["顧客ごと衣装リストを切る","タキシード本体を集める","別館西川さんへ回す（お手入れ・サイズ調整）","タキシード股下・袖直し","タキシード修繕","タキシード用小物を集める","衣装リスト・ネームを貼る","納品前点検","施工後タキシードの手入れ・染み抜き・アイロン","施工後靴・小物手入れ","レンタルタキシード処理","ドッキング衣装集め","ドッキング戻り解体","ドッキングFAX"],
+  "紋付袴": ["ネームを切る","箱に一式とネームをセットして別館へ","施行前アイロン","貼紋発注","納品前点検","施工後紋付の解体","施工後紋付の手入れ・染み抜き・直し","施工後長襦袢 前処理・洗濯","新郎長襦袢の直しとたたみ","施工紋付のアイロンかけ","アイロン後衣装を棚に戻す","小物（帯・扇子・羽織紐・長襦袢）を4階へ戻す"],
+  "ドレス": ["ネームを切る","サイズ直し","施行前アイロンかけ","ドレス袋に入れる・3階へ移動","前撮り後手入れ後 ドレス袋に入れる・3階へ移動","施工後ドレス 破れチェック","施工後ドレス 直し取る","施工後ドレスの手入れ","ドレス修理","施工後ドレスの洗濯","施工後ドレス アイロン","施工後ドレス ハンガー変えて袖などつけて戻す","新作ドレス検品","新作ドレスのネーム付け","新作ドレスの写真付き情報を救貧店へ送る","取り寄せドレス処理"],
+  "ドレス小物": ["ネームを切る（小物箱・各種袋用）","対象小物を集める","小物手入れ","納品前点検","ドレス袋にバニエをセット","施工後靴・小物手入れ、解体","ベール発注"],
+  "フォーマル": ["ネームを切る（小物箱・各種袋用）","ドレス・小物を集める→手入れ","納品前点検","施工後フォーマルドレスのシミ抜き・洗濯","施工後フォーマルドレスのアイロンかけ","施工後小物手入れ、解体","アイロン後のフォーマルをハンガーを変えてフロアへ戻す"],
+  "モーニング": ["顧客ごと衣装リストを切る","モーニング本体を集めて別館へ","モーニング股下・袖直し","モーニング修繕","施行前手入れ・アイロン","試着用Yシャツの襟元をアイロン","衣装リストを貼る","納品前点検（小物セット）","1階へ下ろし、シャツと靴をセット","施工後モーニングの手入れ・染み抜き・アイロン","手入れ済みモーニングを元の場所へ戻す"],
+  "打掛・白無垢": ["ネームを切る","着物本体を集める","長襦袢・帯・帯揚げ・帯締め・草履バッグ等の小物を集める","ネームを箱に貼る","着物・小物を顧客ごとに箱詰め","施分アイロン","納品前点検","施工後 打掛・掛下・裾袢の手入れ・染み抜き・直し","施工後白無垢の解体","施工後（打掛・白無垢・掛下）アイロンかけ","打掛 ふき布付け","商品を棚へ戻す"],
+  "留袖・振袖・袴": ["ネームを切る","着物本体を集める","長襦袢・帯・帯揚げ・帯締め・草履バッグ等の小物を集める","顧客ごとにチェックリストを確認","ネームを箱に貼る","着物・小物・チェックリストを顧客ごとに箱詰め","半袢付け対応、または担当者へ回す","アイロンが必要なものを担当者へ回す","施分アイロン","納品前点検","戻りのチェック（汚れ、裾の縫い付けはずし、草履バッグの手入れ）","施工後 手入れ・染み抜き・直し","留袖用長裾袢の直しとたたみ","施工後 アイロンかけ","戻りの帯、帯揚げのアイロン","下見レンタル準備（振袖）集める・チェックリスト・箱詰め","下見レンタル準備（袴）集める・チェックリスト・箱詰め","ライン・電話問い合わせ対応","荷物送り準備","下見アイロン・点検・梱包"],
+  "子供服": ["ネームを切る","衣装・小物を集める","ネームを袋・箱に貼る","子供洋装のサイズ直し","子供和装のアイロンがけ（着物）","子供和装のアイロンがけ（小物）","お手入れ・汚れ確認を行う","納品前点検","施工後子供洋服の手入れ・洗濯","施工後子供和装の手入れ・洗濯"],
+  "配集": ["衣装配集","衣装の戻り点検","点検後メンズ小物・ドレス小物を各フロアへ","駐車場案内"],
+  "事務データ": ["対象データの配送表・ネーム・衣装表作成","配送リストチェック","伝票入力（プラン伝票・入力・ばらし）更新","請求書作成","リベート作成","入金チェック","配送表 作成前伝票チェック","ひきつぎ伝票 FA入力変更処理"]
+};
+
+let records = [];
+let manualMode = false;
+
+document.getElementById('f-date').valueAsDate = new Date();
+const today = new Date();
+document.getElementById('s-from').valueAsDate = new Date(today.getFullYear(), today.getMonth(), 1);
+document.getElementById('s-to').valueAsDate = today;
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('panel-' + name).classList.add('active');
+  if (name === 'summary') renderSummary();
+}
+
+function onDeptChange() {
+  const dept = document.getElementById('f-dept').value;
+  const sel = document.getElementById('f-no');
+  sel.innerHTML = '<option value="">選択してください</option>';
+  document.getElementById('f-task').value = '';
+  document.getElementById('f-count').value = '';
+  document.getElementById('f-per').value = '';
+  document.getElementById('f-total').value = '';
+  document.getElementById('f-note').value = '';
+  if (dept && TASKS[dept]) {
+    TASKS[dept].forEach((t, i) => {
+      const o = document.createElement('option');
+      o.value = i + 1;
+      o.textContent = (i + 1) + '. ' + t;
+      o.dataset.task = t;
+      sel.appendChild(o);
+    });
+  }
+}
+
+function onTaskSelect() {
+  const sel = document.getElementById('f-no');
+  const opt = sel.options[sel.selectedIndex];
+  document.getElementById('f-task').value = opt.dataset.task || '';
+}
+
+function calcTotal() {
+  if (manualMode) return;
+  const c = parseFloat(document.getElementById('f-count').value) || 0;
+  const p = parseFloat(document.getElementById('f-per').value) || 0;
+  document.getElementById('f-total').value = (c && p) ? c * p : '';
+}
+
+function toggleManual() {
+  manualMode = document.getElementById('f-manual').checked;
+  const tot = document.getElementById('f-total');
+  if (manualMode) { tot.placeholder = '直接入力してください'; }
+  else { tot.placeholder = '自動計算'; calcTotal(); }
+}
+
+function addRecord() {
+  const date = document.getElementById('f-date').value;
+  const dept = document.getElementById('f-dept').value;
+  const person = document.getElementById('f-person').value;
+  const no = document.getElementById('f-no').value;
+  const task = document.getElementById('f-task').value.trim();
+  const count = document.getElementById('f-count').value;
+  const per = document.getElementById('f-per').value;
+  const total = document.getElementById('f-total').value;
+  const note = document.getElementById('f-note').value.trim();
+  if (!date || !dept || !person || !task || !total) {
+    showToast('⚠️ 日付・部門・担当者・業務内容・合計時間は必須です'); return;
+  }
+  records.push({ date, dept, no, task, person, count, per, total, note });
+  renderLog();
+  document.getElementById('f-no').value = '';
+  document.getElementById('f-task').value = '';
+  document.getElementById('f-count').value = '';
+  document.getElementById('f-per').value = '';
+  document.getElementById('f-total').value = '';
+  document.getElementById('f-note').value = '';
+  document.getElementById('f-manual').checked = false;
+  manualMode = false;
+  const deptVal = document.getElementById('f-dept').value;
+  const sel = document.getElementById('f-no');
+  sel.innerHTML = '<option value="">選択してください</option>';
+  if (deptVal && TASKS[deptVal]) {
+    TASKS[deptVal].forEach((t, i) => {
+      const o = document.createElement('option');
+      o.value = i + 1;
+      o.textContent = (i + 1) + '. ' + t;
+      o.dataset.task = t;
+      sel.appendChild(o);
+    });
+  }
+  showToast('✓ 記録しました');
+}
+
+function deleteRecord(i) { records.splice(i, 1); renderLog(); }
+
+function renderLog() {
+  const area = document.getElementById('log-area');
+  document.getElementById('log-title').textContent = `入力済み（${records.length}件）`;
+  if (!records.length) { area.innerHTML = '<div class="empty-log">まだ記録がありません</div>'; return; }
+  let h = '<table class="log-table"><thead><tr><th>日付</th><th>部門</th><th>担当</th><th>業務内容</th><th>分</th><th></th></tr></thead><tbody>';
+  records.forEach((r, i) => {
+    h += `<tr><td>${r.date}</td><td>${r.dept}</td><td>${r.person}</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.task}">${r.task}</td><td><strong>${r.total}</strong></td><td><button class="del-btn" onclick="deleteRecord(${i})">✕</button></td></tr>`;
+  });
+  h += '</tbody></table>';
+  area.innerHTML = h;
+}
+
+function clearAll() {
+  if (!records.length) { showToast('記録がありません'); return; }
+  if (confirm(`${records.length}件の記録をすべて削除しますか？`)) { records = []; renderLog(); showToast('クリアしました'); }
+}
+
+function exportCSV() {
+  if (!records.length) { showToast('記録がありません'); return; }
+  const header = '日付,部門,No.,業務内容,担当者,枚数,1枚あたり(分),合計時間(分),備考';
+  const rows = records.map(r => [r.date, r.dept, r.no, `"${r.task}"`, r.person, r.count, r.per, r.total, `"${r.note}"`].join(','));
+  const csv = '\uFEFF' + header + '\n' + rows.join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  a.download = `業務記録_${records[0]?.date || 'data'}.csv`;
+  a.click();
+  showToast('✓ CSVをダウンロードしました');
+}
+
+function renderSummary() {
+  const from = document.getElementById('s-from').value;
+  const to = document.getElementById('s-to').value;
+  const deptF = document.getElementById('s-dept').value;
+  const filtered = records.filter(r => {
+    if (from && r.date < from) return false;
+    if (to && r.date > to) return false;
+    if (deptF && r.dept !== deptF) return false;
+    return true;
+  });
+  const grid = document.getElementById('summary-grid');
+  if (!filtered.length) {
+    grid.innerHTML = '<div class="summary-card" style="grid-column:1/-1"><p class="no-data">該当データがありません</p></div>'; return;
+  }
+  const byPerson = {}, byDept = {}, byTask = {}, byDate = {};
+  filtered.forEach(r => {
+    const t = parseInt(r.total) || 0;
+    byPerson[r.person] = (byPerson[r.person] || 0) + t;
+    byDept[r.dept] = (byDept[r.dept] || 0) + t;
+    byTask[r.task] = (byTask[r.task] || 0) + t;
+    byDate[r.date] = (byDate[r.date] || 0) + t;
+  });
+  grid.innerHTML = makeCard('👤 人別合計', byPerson) + makeCard('🏷 部門別合計', byDept) + makeCard('📋 業務別 TOP10', byTask, 10) + makeCard('📅 日別合計', byDate);
+}
+
+function makeCard(title, obj, limit) {
+  const sorted = Object.entries(obj).sort((a, b) => b[1] - a[1]);
+  const items = limit ? sorted.slice(0, limit) : sorted;
+  const max = items[0]?.[1] || 1;
+  let h = `<div class="summary-card"><h3>${title}</h3>`;
+  items.forEach(([name, val]) => {
+    const pct = Math.round(val / max * 100);
+    const hours = Math.floor(val / 60), mins = val % 60;
+    const label = hours > 0 ? `${hours}h${mins}m` : `${mins}分`;
+    h += `<div class="summary-row"><span class="sname" title="${name}">${name}</span><div class="bar-wrap"><div class="bar" style="width:${pct}%"></div></div><span class="val">${label}</span></div>`;
+  });
+  return h + '</div>';
+}
+
+function copyGAS() {
+  navigator.clipboard.writeText(document.getElementById('gas-code').textContent)
+    .then(() => showToast('✓ コードをコピーしました'));
+}
+
+async function sendToSheet() {
+  const url = document.getElementById('gas-url').value.trim();
+  if (!url) { showToast('⚠️ GAS URLを入力してください'); return; }
+  if (!records.length) { showToast('送信するデータがありません'); return; }
+  try {
+    showToast('送信中...');
+    const res = await fetch(url, { method: 'POST', body: JSON.stringify(records), headers: { 'Content-Type': 'text/plain' } });
+    showToast(`✓ ${records.length}件を送信しました`);
+  } catch(e) {
+    showToast('⚠️ 送信エラー');
+  }
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
