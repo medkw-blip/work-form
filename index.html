@@ -452,13 +452,15 @@ function copyGAS() {
 }
 
 async function sendToSheet() {
+  // GETリクエストで送信（CORS回避）
   const url = document.getElementById('gas-url').value.trim();
   if (!url) { showToast('⚠️ GAS URLを入力してください'); return; }
   if (!records.length) { showToast('送信するデータがありません'); return; }
   try {
     showToast('送信中...');
-    const res = await fetch(url, { method: 'POST', body: JSON.stringify(records), headers: { 'Content-Type': 'text/plain' } });
-    showToast(`✓ ${records.length}件を送信しました`);
+    const encoded = encodeURIComponent(JSON.stringify(records));
+    await fetch(url + "?data=" + encoded, { method: "GET", mode: "no-cors" });
+    showToast(`✓ ${records.length}件を送信しました。スプレッドシートを確認してください`);
   } catch(e) {
     showToast('⚠️ 送信エラー');
   }
