@@ -478,8 +478,14 @@ function renderView(data, view) {
     });
     area.innerHTML = html;
   } else {
-    // 部門別 × 業務内容の時間一覧
+    // 部門別 × 業務内容の時間一覧（全業務リストを元に0分も表示）
     const map = {};
+    // まず全部門の全業務を0分で初期化
+    Object.keys(TASKS).forEach(dept => {
+      map[dept] = {};
+      TASKS[dept].forEach(task => { map[dept][task] = 0; });
+    });
+    // 実データを上乗せ
     data.forEach(r => {
       const dept = r['部門'];
       const task = r['業務内容'];
@@ -491,13 +497,16 @@ function renderView(data, view) {
     Object.keys(map).sort().forEach(dept => {
       const tasks = map[dept];
       const total = Object.values(tasks).reduce((a,b)=>a+b,0);
+      const maxVal = Math.max(...Object.values(tasks), 1);
       html += `<div class="summary-card" style="margin-bottom:14px">
         <h3>🏷 ${dept}　<span style="font-weight:400;font-size:11px">合計 ${fmtMin(total)}</span></h3>`;
       Object.entries(tasks).sort((a,b)=>b[1]-a[1]).forEach(([task, mins]) => {
-        html += `<div class="summary-row">
+        const pct = Math.round(mins / maxVal * 100);
+        const style = mins === 0 ? 'color:#bbb' : '';
+        html += `<div class="summary-row" style="${style}">
           <span class="sname" style="max-width:200px" title="${task}">${task}</span>
-          <div class="bar-wrap"><div class="bar" style="width:${Math.round(mins/Math.max(...Object.values(tasks))*100)}%"></div></div>
-          <span class="val">${fmtMin(mins)}</span>
+          <div class="bar-wrap"><div class="bar" style="width:${pct}%"></div></div>
+          <span class="val">${mins === 0 ? '—' : fmtMin(mins)}</span>
         </div>`;
       });
       html += '</div>';
