@@ -196,19 +196,14 @@ body { background: #f5f5f5; font-family: 'Hiragino Sans', 'Meiryo', sans-serif; 
         <input type="date" id="s-from">
         <span style="font-size:13px;color:#888">〜</span>
         <input type="date" id="s-to">
-        <select id="s-dept">
-          <option value="">全部門</option>
-          <option>タキシード</option><option>紋付袴</option><option>ドレス</option>
-          <option>ドレス小物</option><option>フォーマル</option><option>モーニング</option>
-          <option>打掛・白無垢</option><option>留袖・振袖・袴</option>
-          <option>子供服</option><option>配集</option><option>事務データ</option>
+        <select id="s-view">
+          <option value="person">担当者別（業務ごとの時間）</option>
+          <option value="dept">部門別（業務ごとの時間）</option>
         </select>
-        <button class="btn-search" onclick="renderSummary()">集計する</button>
+        <button class="btn-search" onclick="loadAndRender()">スプレッドシートから読み込む</button>
       </div>
-      <div class="summary-grid" id="summary-grid">
-        <div class="summary-card" style="grid-column:1/-1">
-          <p class="no-data">入力フォームでデータを追加してから「集計する」を押してください</p>
-        </div>
+      <div id="summary-area">
+        <p class="no-data" style="text-align:center;padding:30px 0">「読み込む」ボタンを押してください</p>
       </div>
     </div>
   </div>
@@ -407,43 +402,113 @@ function exportCSV() {
   showToast('✓ CSVをダウンロードしました');
 }
 
-function renderSummary() {
-  const from = document.getElementById('s-from').value;
-  const to = document.getElementById('s-to').value;
-  const deptF = document.getElementById('s-dept').value;
-  const filtered = records.filter(r => {
-    if (from && r.date < from) return false;
-    if (to && r.date > to) return false;
-    if (deptF && r.dept !== deptF) return false;
-    return true;
-  });
-  const grid = document.getElementById('summary-grid');
-  if (!filtered.length) {
-    grid.innerHTML = '<div class="summary-card" style="grid-column:1/-1"><p class="no-data">該当データがありません</p></div>'; return;
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzWhT6re_D5EI-drn9yN6EzjcSO3yeHD3kECgoS0U1lUPVKT75tMnXXfXpBv0bTR0Zi/exec';
+
+async function loadAndRender() {
+  const area = document.getElementById('summary-area');
+  area.innerHTML = '<p class="no-data" style="text-align:center;padding:30px 0">読み込み中...</p>';
+
+  try {
+    const from = document.getElementById('s-from').value;
+    const to = document.getElementById('s-to').value;
+    const view = document.getElementById('s-view').value;
+
+    const res = await fetch(GAS_URL + '?mode=read', { method: 'GET', mode: 'no-cors' });
+    // no-corsでは直接読めないのでGAS側でJSONPで返す必要があるため、scriptタグで取得
+    area.innerHTML = '<p class="no-data" style="text-align:center;padding:30px 0">読み込み中...</p>';
+    
+    loadViaScript(from, to, view);
+  } catch(e) {
+    area.innerHTML = '<p class="no-data" style="text-align:center;padding:30px 0">エラーが発生しました</p>';
   }
-  const byPerson = {}, byDept = {}, byTask = {}, byDate = {};
-  filtered.forEach(r => {
-    const t = parseInt(r.total) || 0;
-    byPerson[r.person] = (byPerson[r.person] || 0) + t;
-    byDept[r.dept] = (byDept[r.dept] || 0) + t;
-    byTask[r.task] = (byTask[r.task] || 0) + t;
-    byDate[r.date] = (byDate[r.date] || 0) + t;
-  });
-  grid.innerHTML = makeCard('👤 人別合計', byPerson) + makeCard('🏷 部門別合計', byDept) + makeCard('📋 業務別 TOP10', byTask, 10) + makeCard('📅 日別合計', byDate);
 }
 
-function makeCard(title, obj, limit) {
-  const sorted = Object.entries(obj).sort((a, b) => b[1] - a[1]);
-  const items = limit ? sorted.slice(0, limit) : sorted;
-  const max = items[0]?.[1] || 1;
-  let h = `<div class="summary-card"><h3>${title}</h3>`;
-  items.forEach(([name, val]) => {
-    const pct = Math.round(val / max * 100);
-    const hours = Math.floor(val / 60), mins = val % 60;
-    const label = hours > 0 ? `${hours}h${mins}m` : `${mins}分`;
-    h += `<div class="summary-row"><span class="sname" title="${name}">${name}</span><div class="bar-wrap"><div class="bar" style="width:${pct}%"></div></div><span class="val">${label}</span></div>`;
-  });
-  return h + '</div>';
+function loadViaScript(from, to, view) {
+  const area = document.getElementById('summary-area');
+  const existing = document.getElementById('jsonp-script');
+  if (existing) existing.remove();
+  
+  window._gasCallback = function(result) {
+    if (!result || !result.data) {
+      area.innerHTML = '<p class="no-data" style="text-align:center;padding:30px 0">データがありません</p>';
+      return;
+    }
+    let data = result.data;
+    if (from) data = data.filter(r => String(r['日付']).slice(0,10) >= from);
+    if (to) data = data.filter(r => String(r['日付']).slice(0,10) <= to);
+    if (!data.length) {
+      area.innerHTML = '<p class="no-data" style="text-align:center;padding:30px 0">該当データがありません</p>';
+      return;
+    }
+    renderView(data, view);
+  };
+
+  const script = document.createElement('script');
+  script.id = 'jsonp-script';
+  script.src = GAS_URL + '?mode=read&callback=_gasCallback';
+  document.body.appendChild(script);
+}
+
+function renderView(data, view) {
+  const area = document.getElementById('summary-area');
+  if (view === 'person') {
+    // 担当者別 × 業務内容の時間一覧
+    const map = {};
+    data.forEach(r => {
+      const person = r['担当者'];
+      const task = r['業務内容'];
+      const mins = parseInt(r['合計時間(分)']) || 0;
+      if (!map[person]) map[person] = {};
+      map[person][task] = (map[person][task] || 0) + mins;
+    });
+    let html = '';
+    Object.keys(map).sort().forEach(person => {
+      const tasks = map[person];
+      const total = Object.values(tasks).reduce((a,b)=>a+b,0);
+      html += `<div class="summary-card" style="margin-bottom:14px">
+        <h3>👤 ${person}　<span style="font-weight:400;font-size:11px">合計 ${fmtMin(total)}</span></h3>`;
+      Object.entries(tasks).sort((a,b)=>b[1]-a[1]).forEach(([task, mins]) => {
+        html += `<div class="summary-row">
+          <span class="sname" style="max-width:200px" title="${task}">${task}</span>
+          <div class="bar-wrap"><div class="bar" style="width:${Math.round(mins/Math.max(...Object.values(tasks))*100)}%"></div></div>
+          <span class="val">${fmtMin(mins)}</span>
+        </div>`;
+      });
+      html += '</div>';
+    });
+    area.innerHTML = html;
+  } else {
+    // 部門別 × 業務内容の時間一覧
+    const map = {};
+    data.forEach(r => {
+      const dept = r['部門'];
+      const task = r['業務内容'];
+      const mins = parseInt(r['合計時間(分)']) || 0;
+      if (!map[dept]) map[dept] = {};
+      map[dept][task] = (map[dept][task] || 0) + mins;
+    });
+    let html = '';
+    Object.keys(map).sort().forEach(dept => {
+      const tasks = map[dept];
+      const total = Object.values(tasks).reduce((a,b)=>a+b,0);
+      html += `<div class="summary-card" style="margin-bottom:14px">
+        <h3>🏷 ${dept}　<span style="font-weight:400;font-size:11px">合計 ${fmtMin(total)}</span></h3>`;
+      Object.entries(tasks).sort((a,b)=>b[1]-a[1]).forEach(([task, mins]) => {
+        html += `<div class="summary-row">
+          <span class="sname" style="max-width:200px" title="${task}">${task}</span>
+          <div class="bar-wrap"><div class="bar" style="width:${Math.round(mins/Math.max(...Object.values(tasks))*100)}%"></div></div>
+          <span class="val">${fmtMin(mins)}</span>
+        </div>`;
+      });
+      html += '</div>';
+    });
+    area.innerHTML = html;
+  }
+}
+
+function fmtMin(mins) {
+  const h = Math.floor(mins/60), m = mins%60;
+  return h > 0 ? `${h}h${m}m` : `${m}分`;
 }
 
 function copyGAS() {
