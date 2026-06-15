@@ -95,6 +95,24 @@ body { background: #f5f5f5; font-family: 'Hiragino Sans', 'Meiryo', sans-serif; 
   .row-3 { grid-template-columns: 1fr 1fr; }
   .summary-grid { grid-template-columns: 1fr; }
 }
+
+@media print {
+  body { background: white; }
+  .tabs, .app-header, .form-body, .log-section, .export-row,
+  .summary-controls, #panel-form, #panel-gas, .btn-search { display: none !important; }
+  #panel-summary { display: block !important; }
+  .summary-body { padding: 0; }
+  .print-page { page-break-after: always; padding: 16px 20px; }
+  .print-page:last-child { page-break-after: avoid; }
+  .print-header { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+  .print-meta { font-size: 11px; color: #666; margin-bottom: 12px; }
+  .print-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .print-table th { background: #f0f0f0; padding: 6px 8px; text-align: left; border: 1px solid #ccc; font-size: 11px; }
+  .print-table td { padding: 6px 8px; border: 1px solid #ccc; }
+  .print-table tr.zero td { color: #bbb; }
+  .no-print { display: none !important; }
+  @page { size: A4 landscape; margin: 12mm; }
+}
 </style>
 </head>
 <body>
@@ -201,6 +219,7 @@ body { background: #f5f5f5; font-family: 'Hiragino Sans', 'Meiryo', sans-serif; 
           <option value="dept">部門別（業務ごとの時間）</option>
         </select>
         <button class="btn-search" onclick="loadAndRender()">スプレッドシートから読み込む</button>
+        <button class="btn-search no-print" onclick="printSummary()" style="background:#fff;color:#1a1a1a;border:1px solid #d0d0d0;margin-left:4px">🖨 PDF出力</button>
       </div>
       <div id="summary-area">
         <p class="no-data" style="text-align:center;padding:30px 0">「読み込む」ボタンを押してください</p>
@@ -477,15 +496,14 @@ function renderView(data, view) {
       html += '</div>';
     });
     area.innerHTML = html;
+    window._printData = { type: 'person', map };
   } else {
     // 部門別 × 業務内容の時間一覧（全業務リストを元に0分も表示）
     const map = {};
-    // まず全部門の全業務を0分で初期化
     Object.keys(TASKS).forEach(dept => {
       map[dept] = {};
       TASKS[dept].forEach(task => { map[dept][task] = 0; });
     });
-    // 実データを上乗せ
     data.forEach(r => {
       const dept = r['部門'];
       const task = r['業務内容'];
@@ -493,12 +511,14 @@ function renderView(data, view) {
       if (!map[dept]) map[dept] = {};
       map[dept][task] = (map[dept][task] || 0) + mins;
     });
+    // 画面表示用
     let html = '';
-    Object.keys(map).sort().forEach(dept => {
+    const depts = Object.keys(map).sort();
+    depts.forEach(dept => {
       const tasks = map[dept];
       const total = Object.values(tasks).reduce((a,b)=>a+b,0);
       const maxVal = Math.max(...Object.values(tasks), 1);
-      html += `<div class="summary-card" style="margin-bottom:14px">
+      html += `<div class="summary-card dept-card" data-dept="${dept}" style="margin-bottom:14px">
         <h3>🏷 ${dept}　<span style="font-weight:400;font-size:11px">合計 ${fmtMin(total)}</span></h3>`;
       Object.entries(tasks).sort((a,b)=>b[1]-a[1]).forEach(([task, mins]) => {
         const pct = Math.round(mins / maxVal * 100);
@@ -512,12 +532,77 @@ function renderView(data, view) {
       html += '</div>';
     });
     area.innerHTML = html;
+    // 印刷用データを保存
+    window._printData = { type: 'dept', map };
   }
 }
 
 function fmtMin(mins) {
   const h = Math.floor(mins/60), m = mins%60;
   return h > 0 ? `${h}h${m}m` : `${m}分`;
+}
+
+function printSummary() {
+  if (!window._printData) { alert('先にデータを読み込んでください'); return; }
+  const { type, map } = window._printData;
+  const from = document.getElementById('s-from').value;
+  const to = document.getElementById('s-to').value;
+  const period = (from || '開始') + ' 〜 ' + (to || '終了');
+
+  // 印刷用コンテンツを生成
+  const printArea = document.getElementById('summary-area');
+  let html = '';
+
+  if (type === 'dept') {
+    Object.keys(map).sort().forEach(dept => {
+      const tasks = map[dept];
+      const total = Object.values(tasks).reduce((a,b)=>a+b,0);
+      html += `<div class="print-page">
+        <div class="print-header">部門別業務時間集計：${dept}</div>
+        <div class="print-meta">集計期間：${period}　合計：${fmtMin(total)}</div>
+        <table class="print-table">
+          <thead><tr><th>No.</th><th>業務内容</th><th>合計時間</th><th>時間換算</th></tr></thead>
+          <tbody>`;
+      Object.entries(tasks).sort((a,b)=>b[1]-a[1]).forEach(([task, mins], i) => {
+        const h = Math.floor(mins/60), m = mins%60;
+        html += `<tr class="${mins===0?'zero':''}">
+          <td style="width:40px;text-align:center">${i+1}</td>
+          <td>${task}</td>
+          <td style="width:80px;text-align:right">${mins===0?'—':mins+'分'}</td>
+          <td style="width:80px;text-align:right">${mins===0?'—':(h>0?h+'h'+m+'m':m+'分')}</td>
+        </tr>`;
+      });
+      html += '</tbody></table></div>';
+    });
+  } else {
+    Object.keys(map).sort().forEach(person => {
+      const tasks = map[person];
+      const total = Object.values(tasks).reduce((a,b)=>a+b,0);
+      html += `<div class="print-page">
+        <div class="print-header">担当者別業務時間集計：${person}</div>
+        <div class="print-meta">集計期間：${period}　合計：${fmtMin(total)}</div>
+        <table class="print-table">
+          <thead><tr><th>No.</th><th>業務内容</th><th>合計時間</th><th>時間換算</th></tr></thead>
+          <tbody>`;
+      Object.entries(tasks).sort((a,b)=>b[1]-a[1]).forEach(([task, mins], i) => {
+        const h = Math.floor(mins/60), m = mins%60;
+        html += `<tr class="${mins===0?'zero':''}">
+          <td style="width:40px;text-align:center">${i+1}</td>
+          <td>${task}</td>
+          <td style="width:80px;text-align:right">${mins===0?'—':mins+'分'}</td>
+          <td style="width:80px;text-align:right">${mins===0?'—':(h>0?h+'h'+m+'m':m+'分')}</td>
+        </tr>`;
+      });
+      html += '</tbody></table></div>';
+    });
+  }
+
+  printArea.innerHTML = html;
+  setTimeout(() => {
+    window.print();
+    // 印刷後に画面表示を元に戻す
+    loadAndRender();
+  }, 300);
 }
 
 function copyGAS() {
