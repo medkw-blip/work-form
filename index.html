@@ -432,10 +432,6 @@ async function loadAndRender() {
     const to = document.getElementById('s-to').value;
     const view = document.getElementById('s-view').value;
 
-    const res = await fetch(GAS_URL + '?mode=read', { method: 'GET', mode: 'no-cors' });
-    // no-corsでは直接読めないのでGAS側でJSONPで返す必要があるため、scriptタグで取得
-    area.innerHTML = '<p class="no-data" style="text-align:center;padding:30px 0">読み込み中...</p>';
-    
     loadViaScript(from, to, view);
   } catch(e) {
     area.innerHTML = '<p class="no-data" style="text-align:center;padding:30px 0">エラーが発生しました</p>';
@@ -468,29 +464,43 @@ function loadViaScript(from, to, view) {
   document.body.appendChild(script);
 }
 
+// 表示用：枚数があれば「45分（15枚）」、なければ「45分」
+function fmtMinCount(mins, count) {
+  const minText = fmtMin(mins);
+  if (count && count > 0) {
+    return `${minText}（${count}枚）`;
+  }
+  return minText;
+}
+
 function renderView(data, view) {
   const area = document.getElementById('summary-area');
   if (view === 'person') {
-    // 担当者別 × 業務内容の時間一覧
+    // 担当者別 × 業務内容の時間・枚数一覧
     const map = {};
     data.forEach(r => {
       const person = r['担当者'];
       const task = r['業務内容'];
       const mins = parseInt(r['合計時間(分)']) || 0;
+      const count = parseInt(r['枚数']) || 0;
       if (!map[person]) map[person] = {};
-      map[person][task] = (map[person][task] || 0) + mins;
+      if (!map[person][task]) map[person][task] = { mins: 0, count: 0 };
+      map[person][task].mins += mins;
+      map[person][task].count += count;
     });
     let html = '';
     Object.keys(map).sort().forEach(person => {
       const tasks = map[person];
-      const total = Object.values(tasks).reduce((a,b)=>a+b,0);
+      const total = Object.values(tasks).reduce((a,b)=>a+b.mins,0);
+      const totalCount = Object.values(tasks).reduce((a,b)=>a+b.count,0);
+      const maxVal = Math.max(...Object.values(tasks).map(t=>t.mins), 1);
       html += `<div class="summary-card" style="margin-bottom:14px">
-        <h3>👤 ${person}　<span style="font-weight:400;font-size:11px">合計 ${fmtMin(total)}</span></h3>`;
-      Object.entries(tasks).sort((a,b)=>b[1]-a[1]).forEach(([task, mins]) => {
+        <h3>👤 ${person}　<span style="font-weight:400;font-size:11px">合計 ${fmtMin(total)}${totalCount > 0 ? `（${totalCount}枚）` : ''}</span></h3>`;
+      Object.entries(tasks).sort((a,b)=>b[1].mins-a[1].mins).forEach(([task, v]) => {
         html += `<div class="summary-row">
           <span class="sname" style="max-width:200px" title="${task}">${task}</span>
-          <div class="bar-wrap"><div class="bar" style="width:${Math.round(mins/Math.max(...Object.values(tasks))*100)}%"></div></div>
-          <span class="val">${fmtMin(mins)}</span>
+          <div class="bar-wrap"><div class="bar" style="width:${Math.round(v.mins/maxVal*100)}%"></div></div>
+          <span class="val">${fmtMinCount(v.mins, v.count)}</span>
         </div>`;
       });
       html += '</div>';
@@ -498,41 +508,43 @@ function renderView(data, view) {
     area.innerHTML = html;
     window._printData = { type: 'person', map };
   } else {
-    // 部門別 × 業務内容の時間一覧（全業務リストを元に0分も表示）
+    // 部門別 × 業務内容の時間・枚数一覧（全業務リストを元に0分も表示）
     const map = {};
     Object.keys(TASKS).forEach(dept => {
       map[dept] = {};
-      TASKS[dept].forEach(task => { map[dept][task] = 0; });
+      TASKS[dept].forEach(task => { map[dept][task] = { mins: 0, count: 0 }; });
     });
     data.forEach(r => {
       const dept = r['部門'];
       const task = r['業務内容'];
       const mins = parseInt(r['合計時間(分)']) || 0;
+      const count = parseInt(r['枚数']) || 0;
       if (!map[dept]) map[dept] = {};
-      map[dept][task] = (map[dept][task] || 0) + mins;
+      if (!map[dept][task]) map[dept][task] = { mins: 0, count: 0 };
+      map[dept][task].mins += mins;
+      map[dept][task].count += count;
     });
-    // 画面表示用
     let html = '';
     const depts = Object.keys(map).sort();
     depts.forEach(dept => {
       const tasks = map[dept];
-      const total = Object.values(tasks).reduce((a,b)=>a+b,0);
-      const maxVal = Math.max(...Object.values(tasks), 1);
+      const total = Object.values(tasks).reduce((a,b)=>a+b.mins,0);
+      const totalCount = Object.values(tasks).reduce((a,b)=>a+b.count,0);
+      const maxVal = Math.max(...Object.values(tasks).map(t=>t.mins), 1);
       html += `<div class="summary-card dept-card" data-dept="${dept}" style="margin-bottom:14px">
-        <h3>🏷 ${dept}　<span style="font-weight:400;font-size:11px">合計 ${fmtMin(total)}</span></h3>`;
-      Object.entries(tasks).sort((a,b)=>b[1]-a[1]).forEach(([task, mins]) => {
-        const pct = Math.round(mins / maxVal * 100);
-        const style = mins === 0 ? 'color:#bbb' : '';
+        <h3>🏷 ${dept}　<span style="font-weight:400;font-size:11px">合計 ${fmtMin(total)}${totalCount > 0 ? `（${totalCount}枚）` : ''}</span></h3>`;
+      Object.entries(tasks).sort((a,b)=>b[1].mins-a[1].mins).forEach(([task, v]) => {
+        const pct = Math.round(v.mins / maxVal * 100);
+        const style = v.mins === 0 ? 'color:#bbb' : '';
         html += `<div class="summary-row" style="${style}">
           <span class="sname" style="max-width:200px" title="${task}">${task}</span>
           <div class="bar-wrap"><div class="bar" style="width:${pct}%"></div></div>
-          <span class="val">${mins === 0 ? '—' : fmtMin(mins)}</span>
+          <span class="val">${v.mins === 0 ? '—' : fmtMinCount(v.mins, v.count)}</span>
         </div>`;
       });
       html += '</div>';
     });
     area.innerHTML = html;
-    // 印刷用データを保存
     window._printData = { type: 'dept', map };
   }
 }
@@ -549,27 +561,28 @@ function printSummary() {
   const to = document.getElementById('s-to').value;
   const period = (from || '開始') + ' 〜 ' + (to || '終了');
 
-  // 印刷用コンテンツを生成
   const printArea = document.getElementById('summary-area');
   let html = '';
 
   if (type === 'dept') {
     Object.keys(map).sort().forEach(dept => {
       const tasks = map[dept];
-      const total = Object.values(tasks).reduce((a,b)=>a+b,0);
+      const total = Object.values(tasks).reduce((a,b)=>a+b.mins,0);
+      const totalCount = Object.values(tasks).reduce((a,b)=>a+b.count,0);
       html += `<div class="print-page">
         <div class="print-header">部門別業務時間集計：${dept}</div>
-        <div class="print-meta">集計期間：${period}　合計：${fmtMin(total)}</div>
+        <div class="print-meta">集計期間：${period}　合計：${fmtMin(total)}${totalCount > 0 ? `（${totalCount}枚）` : ''}</div>
         <table class="print-table">
-          <thead><tr><th>No.</th><th>業務内容</th><th>合計時間</th><th>時間換算</th></tr></thead>
+          <thead><tr><th>No.</th><th>業務内容</th><th>枚数</th><th>合計時間</th><th>時間換算</th></tr></thead>
           <tbody>`;
-      Object.entries(tasks).sort((a,b)=>b[1]-a[1]).forEach(([task, mins], i) => {
-        const h = Math.floor(mins/60), m = mins%60;
-        html += `<tr class="${mins===0?'zero':''}">
+      Object.entries(tasks).sort((a,b)=>b[1].mins-a[1].mins).forEach(([task, v], i) => {
+        const h = Math.floor(v.mins/60), m = v.mins%60;
+        html += `<tr class="${v.mins===0?'zero':''}">
           <td style="width:40px;text-align:center">${i+1}</td>
           <td>${task}</td>
-          <td style="width:80px;text-align:right">${mins===0?'—':mins+'分'}</td>
-          <td style="width:80px;text-align:right">${mins===0?'—':(h>0?h+'h'+m+'m':m+'分')}</td>
+          <td style="width:60px;text-align:right">${v.count > 0 ? v.count + '枚' : '—'}</td>
+          <td style="width:80px;text-align:right">${v.mins===0?'—':v.mins+'分'}</td>
+          <td style="width:80px;text-align:right">${v.mins===0?'—':(h>0?h+'h'+m+'m':m+'分')}</td>
         </tr>`;
       });
       html += '</tbody></table></div>';
@@ -577,20 +590,22 @@ function printSummary() {
   } else {
     Object.keys(map).sort().forEach(person => {
       const tasks = map[person];
-      const total = Object.values(tasks).reduce((a,b)=>a+b,0);
+      const total = Object.values(tasks).reduce((a,b)=>a+b.mins,0);
+      const totalCount = Object.values(tasks).reduce((a,b)=>a+b.count,0);
       html += `<div class="print-page">
         <div class="print-header">担当者別業務時間集計：${person}</div>
-        <div class="print-meta">集計期間：${period}　合計：${fmtMin(total)}</div>
+        <div class="print-meta">集計期間：${period}　合計：${fmtMin(total)}${totalCount > 0 ? `（${totalCount}枚）` : ''}</div>
         <table class="print-table">
-          <thead><tr><th>No.</th><th>業務内容</th><th>合計時間</th><th>時間換算</th></tr></thead>
+          <thead><tr><th>No.</th><th>業務内容</th><th>枚数</th><th>合計時間</th><th>時間換算</th></tr></thead>
           <tbody>`;
-      Object.entries(tasks).sort((a,b)=>b[1]-a[1]).forEach(([task, mins], i) => {
-        const h = Math.floor(mins/60), m = mins%60;
-        html += `<tr class="${mins===0?'zero':''}">
+      Object.entries(tasks).sort((a,b)=>b[1].mins-a[1].mins).forEach(([task, v], i) => {
+        const h = Math.floor(v.mins/60), m = v.mins%60;
+        html += `<tr class="${v.mins===0?'zero':''}">
           <td style="width:40px;text-align:center">${i+1}</td>
           <td>${task}</td>
-          <td style="width:80px;text-align:right">${mins===0?'—':mins+'分'}</td>
-          <td style="width:80px;text-align:right">${mins===0?'—':(h>0?h+'h'+m+'m':m+'分')}</td>
+          <td style="width:60px;text-align:right">${v.count > 0 ? v.count + '枚' : '—'}</td>
+          <td style="width:80px;text-align:right">${v.mins===0?'—':v.mins+'分'}</td>
+          <td style="width:80px;text-align:right">${v.mins===0?'—':(h>0?h+'h'+m+'m':m+'分')}</td>
         </tr>`;
       });
       html += '</tbody></table></div>';
@@ -600,7 +615,6 @@ function printSummary() {
   printArea.innerHTML = html;
   setTimeout(() => {
     window.print();
-    // 印刷後に画面表示を元に戻す
     loadAndRender();
   }, 300);
 }
@@ -611,7 +625,6 @@ function copyGAS() {
 }
 
 async function sendToSheet() {
-  // GETリクエストで送信（CORS回避）
   const url = document.getElementById('gas-url').value.trim();
   if (!url) { showToast('⚠️ GAS URLを入力してください'); return; }
   if (!records.length) { showToast('送信するデータがありません'); return; }
