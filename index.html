@@ -464,11 +464,12 @@ function loadViaScript(from, to, view) {
   document.body.appendChild(script);
 }
 
-// 表示用：枚数があれば「45分（15枚）」、なければ「45分」
+// 表示用：枚数があれば「45分（15枚／1枚あたり3分）」、なければ「45分」
 function fmtMinCount(mins, count) {
   const minText = fmtMin(mins);
   if (count && count > 0) {
-    return `${minText}（${count}枚）`;
+    const perSheet = (mins / count).toFixed(1);
+    return `${minText}（${count}枚／1枚${perSheet}分）`;
   }
   return minText;
 }
@@ -495,7 +496,7 @@ function renderView(data, view) {
       const totalCount = Object.values(tasks).reduce((a,b)=>a+b.count,0);
       const maxVal = Math.max(...Object.values(tasks).map(t=>t.mins), 1);
       html += `<div class="summary-card" style="margin-bottom:14px">
-        <h3>👤 ${person}　<span style="font-weight:400;font-size:11px">合計 ${fmtMin(total)}${totalCount > 0 ? `（${totalCount}枚）` : ''}</span></h3>`;
+        <h3>👤 ${person}　<span style="font-weight:400;font-size:11px">合計 ${fmtMin(total)}${totalCount > 0 ? `（${totalCount}枚／1枚${(total/totalCount).toFixed(1)}分）` : ''}</span></h3>`;
       Object.entries(tasks).sort((a,b)=>b[1].mins-a[1].mins).forEach(([task, v]) => {
         html += `<div class="summary-row">
           <span class="sname" style="max-width:200px" title="${task}">${task}</span>
@@ -532,7 +533,7 @@ function renderView(data, view) {
       const totalCount = Object.values(tasks).reduce((a,b)=>a+b.count,0);
       const maxVal = Math.max(...Object.values(tasks).map(t=>t.mins), 1);
       html += `<div class="summary-card dept-card" data-dept="${dept}" style="margin-bottom:14px">
-        <h3>🏷 ${dept}　<span style="font-weight:400;font-size:11px">合計 ${fmtMin(total)}${totalCount > 0 ? `（${totalCount}枚）` : ''}</span></h3>`;
+        <h3>🏷 ${dept}　<span style="font-weight:400;font-size:11px">合計 ${fmtMin(total)}${totalCount > 0 ? `（${totalCount}枚／1枚${(total/totalCount).toFixed(1)}分）` : ''}</span></h3>`;
       Object.entries(tasks).sort((a,b)=>b[1].mins-a[1].mins).forEach(([task, v]) => {
         const pct = Math.round(v.mins / maxVal * 100);
         const style = v.mins === 0 ? 'color:#bbb' : '';
@@ -573,16 +574,18 @@ function printSummary() {
         <div class="print-header">部門別業務時間集計：${dept}</div>
         <div class="print-meta">集計期間：${period}　合計：${fmtMin(total)}${totalCount > 0 ? `（${totalCount}枚）` : ''}</div>
         <table class="print-table">
-          <thead><tr><th>No.</th><th>業務内容</th><th>枚数</th><th>合計時間</th><th>時間換算</th></tr></thead>
+          <thead><tr><th>No.</th><th>業務内容</th><th>枚数</th><th>合計時間</th><th>時間換算</th><th>1枚あたり</th></tr></thead>
           <tbody>`;
       Object.entries(tasks).sort((a,b)=>b[1].mins-a[1].mins).forEach(([task, v], i) => {
         const h = Math.floor(v.mins/60), m = v.mins%60;
+        const perSheet = v.count > 0 ? (v.mins / v.count).toFixed(1) + '分' : '—';
         html += `<tr class="${v.mins===0?'zero':''}">
           <td style="width:40px;text-align:center">${i+1}</td>
           <td>${task}</td>
           <td style="width:60px;text-align:right">${v.count > 0 ? v.count + '枚' : '—'}</td>
           <td style="width:80px;text-align:right">${v.mins===0?'—':v.mins+'分'}</td>
           <td style="width:80px;text-align:right">${v.mins===0?'—':(h>0?h+'h'+m+'m':m+'分')}</td>
+          <td style="width:70px;text-align:right">${perSheet}</td>
         </tr>`;
       });
       html += '</tbody></table></div>';
@@ -596,16 +599,18 @@ function printSummary() {
         <div class="print-header">担当者別業務時間集計：${person}</div>
         <div class="print-meta">集計期間：${period}　合計：${fmtMin(total)}${totalCount > 0 ? `（${totalCount}枚）` : ''}</div>
         <table class="print-table">
-          <thead><tr><th>No.</th><th>業務内容</th><th>枚数</th><th>合計時間</th><th>時間換算</th></tr></thead>
+          <thead><tr><th>No.</th><th>業務内容</th><th>枚数</th><th>合計時間</th><th>時間換算</th><th>1枚あたり</th></tr></thead>
           <tbody>`;
       Object.entries(tasks).sort((a,b)=>b[1].mins-a[1].mins).forEach(([task, v], i) => {
         const h = Math.floor(v.mins/60), m = v.mins%60;
+        const perSheet = v.count > 0 ? (v.mins / v.count).toFixed(1) + '分' : '—';
         html += `<tr class="${v.mins===0?'zero':''}">
           <td style="width:40px;text-align:center">${i+1}</td>
           <td>${task}</td>
           <td style="width:60px;text-align:right">${v.count > 0 ? v.count + '枚' : '—'}</td>
           <td style="width:80px;text-align:right">${v.mins===0?'—':v.mins+'分'}</td>
           <td style="width:80px;text-align:right">${v.mins===0?'—':(h>0?h+'h'+m+'m':m+'分')}</td>
+          <td style="width:70px;text-align:right">${perSheet}</td>
         </tr>`;
       });
       html += '</tbody></table></div>';
