@@ -309,7 +309,7 @@ function switchTab(name, btn) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('panel-' + name).classList.add('active');
-  if (name === 'summary') renderSummary();
+  if (name === 'summary') loadAndRender();
 }
 
 function onDeptChange() {
@@ -540,7 +540,7 @@ function renderView(data, view) {
     const map = {};
     Object.keys(TASKS).forEach(dept => {
       map[dept] = {};
-      TASKS[dept].forEach(task => { map[dept][task] = { mins: 0, count: 0 }; });
+      TASKS[dept].forEach(task => { map[dept][task] = { mins: 0, count: 0, persons: {} }; });
     });
     data.forEach(r => {
       const dept = r['部門'];
