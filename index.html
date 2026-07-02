@@ -545,12 +545,16 @@ function renderView(data, view) {
     data.forEach(r => {
       const dept = r['部門'];
       const task = r['業務内容'];
+      const person = r['担当者'];
       const mins = parseInt(r['合計時間(分)']) || 0;
       const count = parseInt(r['枚数']) || 0;
       if (!map[dept]) map[dept] = {};
-      if (!map[dept][task]) map[dept][task] = { mins: 0, count: 0 };
+      if (!map[dept][task]) map[dept][task] = { mins: 0, count: 0, persons: {} };
       map[dept][task].mins += mins;
       map[dept][task].count += count;
+      if (!map[dept][task].persons[person]) map[dept][task].persons[person] = { mins: 0, count: 0 };
+      map[dept][task].persons[person].mins += mins;
+      map[dept][task].persons[person].count += count;
     });
     let html = '';
     const depts = Object.keys(map).sort();
@@ -603,21 +607,42 @@ function printSummary() {
         <div class="print-header">部門別業務時間集計：${dept}</div>
         <div class="print-meta">集計期間：${period}　合計：${fmtMin(total)}${totalCount > 0 ? `（${totalCount}枚）` : ''}</div>
         <table class="print-table">
-          <thead><tr><th>No.</th><th>業務内容</th><th>メイン担当</th><th>枚数</th><th>合計時間</th><th>時間換算</th><th>1枚あたり</th></tr></thead>
+          <thead><tr><th>No.</th><th>業務内容／担当者</th><th>メイン</th><th>枚数</th><th>合計時間</th><th>時間換算</th><th>1枚あたり</th></tr></thead>
           <tbody>`;
       Object.entries(tasks).sort((a,b)=>b[1].mins-a[1].mins).forEach(([task, v], i) => {
         const h = Math.floor(v.mins/60), m = v.mins%60;
         const perSheet = v.count > 0 ? (v.mins / v.count).toFixed(1) + '分' : '—';
         const mainPerson = taskMainMap[dept + '|' + task] || '—';
-        html += `<tr class="${v.mins===0?'zero':''}">
+        const isZero = v.mins === 0;
+        // 業務合計行
+        html += `<tr class="${isZero?'zero':''}" style="background:#f5f5f5;font-weight:600">
           <td style="width:40px;text-align:center">${i+1}</td>
           <td>${task}</td>
-          <td style="width:70px;text-align:center">${mainPerson}</td>
+          <td style="width:60px;text-align:center;color:#c0392b">${mainPerson}</td>
           <td style="width:60px;text-align:right">${v.count > 0 ? v.count + '枚' : '—'}</td>
-          <td style="width:80px;text-align:right">${v.mins===0?'—':v.mins+'分'}</td>
-          <td style="width:80px;text-align:right">${v.mins===0?'—':(h>0?h+'h'+m+'m':m+'分')}</td>
+          <td style="width:80px;text-align:right">${isZero?'—':v.mins+'分'}</td>
+          <td style="width:80px;text-align:right">${isZero?'—':(h>0?h+'h'+m+'m':m+'分')}</td>
           <td style="width:70px;text-align:right">${perSheet}</td>
         </tr>`;
+        // 担当者内訳行（0分の業務は内訳不要）
+        if (!isZero && v.persons) {
+          Object.entries(v.persons)
+            .sort((a,b)=>b[1].mins-a[1].mins)
+            .forEach(([person, pv]) => {
+              const ph = Math.floor(pv.mins/60), pm = pv.mins%60;
+              const pPerSheet = pv.count > 0 ? (pv.mins/pv.count).toFixed(1)+'分' : '—';
+              const pIsMain = person === mainPerson;
+              html += `<tr style="font-size:11px;color:#555">
+                <td></td>
+                <td style="padding-left:20px">${pIsMain?'★':' '} ${person}</td>
+                <td></td>
+                <td style="text-align:right">${pv.count > 0 ? pv.count+'枚' : '—'}</td>
+                <td style="text-align:right">${pv.mins}分</td>
+                <td style="text-align:right">${ph>0?ph+'h'+pm+'m':pm+'分'}</td>
+                <td style="text-align:right">${pPerSheet}</td>
+              </tr>`;
+            });
+        }
       });
       html += '</tbody></table></div>';
     });
